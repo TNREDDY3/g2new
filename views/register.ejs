@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Bottle Deposit</title>
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        .register-container {
+            background-color: #e6ffee;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            width: 380px;
+            height: 450px;
+        }
+        
+        .register-title {
+            color: #00d24d;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        
+        .register-btn {
+            background: #00d24d;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 24px;
+            width: 80%;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        
+        .back-btn {
+            background: #ff3b30;
+            color: white;
+            border: none;
+            padding: 10px;
+            font-size: 16px;
+            width: 50%;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+    </style>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="no-select">
+    <div id="register-section">
+        <div class="register-container">
+            <div class="register-title">Secret Registration Portal</div>
+            <div class="user-icon">
+                <i class="fas fa-user-plus"></i>
+            </div>
+            <div class="input-box">
+                <i class="fas fa-user"></i>
+                <span class="separator">|</span>
+                <input type="text" id="full-name" placeholder="Full Name">
+            </div>
+            <div class="input-box">
+                <i class="fa-solid fa-id-card"></i>
+                <span class="separator">|</span>
+                <input type="text" id="user-id" placeholder="Choose User ID">
+            </div>
+            <div class="input-box">
+                <i class="fas fa-lock"></i>
+                <span class="separator">|</span>
+                <input type="password" id="password" placeholder="Password">
+                <i class="fas fa-eye eye-icon"></i>
+            </div>
+            <div class="input-box">
+                <i class="fas fa-lock"></i>
+                <span class="separator">|</span>
+                <input type="password" id="confirm-password" placeholder="Confirm Password">
+            </div>
+            <button class="register-btn">Register</button>
+            <a href="/" class="back-btn">Back to Login</a>
+            <div class="error-message" style="display: none;"></div>
+            <div class="success-message" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const eyeIcon = document.querySelector(".eye-icon");
+            const passwordInput = document.getElementById("password");
+            const confirmPasswordInput = document.getElementById("confirm-password");
+            const registerButton = document.querySelector(".register-btn");
+            const fullNameInput = document.getElementById("full-name");
+            const userIdInput = document.getElementById("user-id");
+            const errorMessageDiv = document.querySelector(".error-message");
+            const successMessageDiv = document.querySelector(".success-message");
+            
+            // Connect to Socket.IO
+            const socket = io();
+            
+            // Toggle password visibility
+            if (eyeIcon) {
+                eyeIcon.addEventListener("click", function () {
+                    passwordInput.type = passwordInput.type === "password" ? "text" : "password";
+                    eyeIcon.classList.toggle("fa-eye");
+                    eyeIcon.classList.toggle("fa-eye-slash");
+                });
+            }
+            
+            // Handle registration
+            if (registerButton) {
+                registerButton.addEventListener("click", function () {
+                    const fullName = fullNameInput.value.trim();
+                    const userId = userIdInput.value.trim();
+                    const password = passwordInput.value.trim();
+                    const confirmPassword = confirmPasswordInput.value.trim();
+                    
+                    // Reset messages
+                    errorMessageDiv.style.display = "none";
+                    successMessageDiv.style.display = "none";
+                    
+                    // Validate inputs
+                    if (!fullName || !userId || !password || !confirmPassword) {
+                        errorMessageDiv.textContent = "Please fill in all fields";
+                        errorMessageDiv.style.display = "block";
+                        return;
+                    }
+                    
+                    if (password !== confirmPassword) {
+                        errorMessageDiv.textContent = "Passwords do not match";
+                        errorMessageDiv.style.display = "block";
+                        return;
+                    }
+                    
+                    // Emit registration event to server
+                    socket.emit('register', { fullName, userId, password });
+                });
+            }
+            
+            // Socket event handlers
+            socket.on('registrationSuccess', function() {
+                // Show success message
+                successMessageDiv.textContent = "Registration successful! You can now login.";
+                successMessageDiv.style.display = "block";
+                
+                // Clear inputs
+                fullNameInput.value = "";
+                userIdInput.value = "";
+                passwordInput.value = "";
+                confirmPasswordInput.value = "";
+            });
+            
+            socket.on('registrationFailed', function(msg) {
+                // Show error message
+                errorMessageDiv.textContent = msg;
+                errorMessageDiv.style.display = "block";
+            });
+        });
+        
+        // Prevent F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U (view source)
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "F12" || 
+                (event.ctrlKey && event.shiftKey && (event.key === "I" || event.key === "J")) || 
+                (event.ctrlKey && event.key === "U")) {
+                event.preventDefault();
+            }
+        });
+
+        // Prevent right-click
+        document.addEventListener("contextmenu", function (event) {
+            event.preventDefault();
+        });
+    </script>
+</body>
+</html> 

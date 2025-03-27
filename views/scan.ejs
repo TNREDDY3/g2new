@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bottle Scanner</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .scanner-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        #videoElement {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .overlay.active {
+            opacity: 1;
+        }
+        .button-container {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .start-btn {
+            background: #4CAF50;
+            color: white;
+        }
+        .end-btn {
+            background: #f44336;
+            color: white;
+            display: none;
+        }
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 18px;
+            color: #333;
+        }
+        .bottle-count {
+            text-align: center;
+            font-size: 24px;
+            color: #2196F3;
+            margin: 10px 0;
+        }
+        .scanning-animation {
+            width: 100px;
+            height: 100px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .confidence-bar {
+            width: 100%;
+            height: 20px;
+            background: #f3f3f3;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+            display: none;
+        }
+        .confidence-fill {
+            height: 100%;
+            background: #4CAF50;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="text-align: center;">Bottle Scanner</h1>
+        <div class="bottle-count">
+            Bottles Deposited: <span id="bottleCount">0</span>
+        </div>
+        <div class="scanner-container">
+            <video id="videoElement" autoplay playsinline></video>
+            <div class="overlay" id="overlay">
+                <div id="message">Inlet opened, please place your bottle</div>
+                <div class="scanning-animation" id="scanningAnimation"></div>
+                <div class="confidence-bar" id="confidenceBar">
+                    <div class="confidence-fill" id="confidenceFill"></div>
+                </div>
+            </div>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="button-container">
+            <button class="start-btn" onclick="startScanning()">Start Scanning</button>
+            <button class="end-btn" onclick="endScanning()">End Scanning</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const video = document.getElementById('videoElement');
+        const overlay = document.getElementById('overlay');
+        const message = document.getElementById('message');
+        const status = document.getElementById('status');
+        const bottleCount = document.getElementById('bottleCount');
+        const startBtn = document.querySelector('.start-btn');
+        const endBtn = document.querySelector('.end-btn');
+        const scanningAnimation = document.getElementById('scanningAnimation');
+        const confidenceBar = document.getElementById('confidenceBar');
+        const confidenceFill = document.getElementById('confidenceFill');
+        let scanning = false;
+        let scanningInterval = null;
+
+        // Request camera access
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: "environment"
+                    } 
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                status.textContent = 'Error accessing camera. Please check permissions.';
+            }
+        }
+
+        // Start scanning process
+        function startScanning() {
+            scanning = true;
+            overlay.classList.add('active');
+            startBtn.style.display = 'none';
+            endBtn.style.display = 'block';
+            status.textContent = 'Scanning in progress...';
+            scanningAnimation.style.display = 'block';
+            confidenceBar.style.display = 'block';
+            
+            // Start continuous scanning
+            scanningInterval = setInterval(scanFrame, 1000); // Scan every second
+        }
+
+        // End scanning process
+        function endScanning() {
+            scanning = false;
+            overlay.classList.remove('active');
+            startBtn.style.display = 'block';
+            endBtn.style.display = 'none';
+            status.textContent = 'Scanning stopped';
+            scanningAnimation.style.display = 'none';
+            confidenceBar.style.display = 'none';
+            
+            // Clear scanning interval
+            if (scanningInterval) {
+                clearInterval(scanningInterval);
+                scanningInterval = null;
+            }
+        }
+
+        // Scan current frame
+        function scanFrame() {
+            if (!scanning) return;
+            
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0);
+            
+            // Send frame data to server
+            socket.emit('scanFrame', canvas.toDataURL('image/jpeg'));
+        }
+
+        // Handle detection results
+        socket.on('detectionResult', (data) => {
+            if (data.isBottle) {
+                message.textContent = 'Bottle detected! Thank you for your deposit.';
+                bottleCount.textContent = data.count;
+                confidenceFill.style.width = `${data.confidence * 100}%`;
+                
+                // Stop scanning for 3 seconds after detection
+                clearInterval(scanningInterval);
+                setTimeout(() => {
+                    message.textContent = 'Inlet opened, please place your bottle';
+                    if (scanning) {
+                        scanningInterval = setInterval(scanFrame, 1000);
+                    }
+                }, 3000);
+            } else {
+                message.textContent = 'Please collect your material at outlet. It was not a bottle.';
+                confidenceFill.style.width = '0%';
+                
+                // Resume scanning after 3 seconds
+                setTimeout(() => {
+                    message.textContent = 'Inlet opened, please place your bottle';
+                }, 3000);
+            }
+        });
+
+        // Initialize camera
+        setupCamera();
+    </script>
+</body>
+</html> 

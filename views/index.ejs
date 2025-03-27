@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login & Deposit</title>
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/css/styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        .scanner-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .camera-section {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .camera-feed {
+            width: 100%;
+            max-width: 800px;
+            height: 100%;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            aspect-ratio: 16/9;
+        }
+        .camera-feed video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .result-section {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-height: 40vh;
+            overflow-y: auto;
+        }
+        .result-history {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            flex: 1;
+            overflow-y: auto;
+        }
+        .result-item {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+        .result-success {
+            background: rgba(76, 175, 80, 0.3);
+            border-left: 3px solid #4CAF50;
+        }
+        .result-failure {
+            background: rgba(244, 67, 54, 0.3);
+            border-left: 3px solid #f44336;
+        }
+        .result-time {
+            font-size: 0.8em;
+            color: #aaa;
+        }
+        .scan-info {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            color: white;
+        }
+        .scan-stats {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-size: 14px;
+        }
+        .detection-box {
+            position: absolute;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            pointer-events: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+        }
+        .detection-label {
+            position: absolute;
+            background: rgba(76, 175, 80, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            pointer-events: none;
+            white-space: nowrap;
+            z-index: 3;
+        }
+        .action-panel {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .action-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+        .add-more-btn {
+            background: #4CAF50;
+            color: white;
+        }
+        .end-btn {
+            background: #f44336;
+            color: white;
+        }
+        .scanning-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2;
+        }
+        .scan-timer {
+            font-size: 48px;
+            font-weight: bold;
+            color: #4CAF50;
+            text-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+            margin: 20px 0;
+        }
+        .scanning-animation {
+            width: 80px;
+            height: 80px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .result-message {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 30px;
+            border-radius: 5px;
+            font-size: 20px;
+            display: none;
+        }
+        .success-message {
+            color: #4CAF50;
+        }
+        .error-message {
+            color: #f44336;
+        }
+        .result-screen {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 2000;
+            display: none;
+            min-width: 300px;
+        }
+
+        .result-screen.success {
+            border: 2px solid #4CAF50;
+        }
+
+        .result-screen.error {
+            border: 2px solid #f44336;
+        }
+
+        .result-screen h2 {
+            color: white;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        .result-screen p {
+            color: #ccc;
+            margin-bottom: 20px;
+        }
+
+        .result-screen button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .result-screen.error button {
+            background: #f44336;
+        }
+
+        .result-screen button:hover {
+            opacity: 0.9;
+        }
+
+        @media (max-width: 768px) {
+            .scanner-container {
+                flex-direction: column;
+            }
+
+            .camera-section {
+                flex: 1;
+                padding: 10px;
+            }
+
+            .result-section {
+                max-height: 30vh;
+            }
+
+            .scan-timer {
+                font-size: 36px;
+            }
+
+            .scanning-animation {
+                width: 60px;
+                height: 60px;
+            }
+
+            .action-panel {
+                flex-direction: column;
+            }
+
+            .action-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="no-select">
+    <!--Credential_based_Login Section-->
+    <div id="login-section">
+        <a href="/app" class="get-app">Get App</a>
+        <div class="login-container">
+            <div class="user-icon">
+                <i class="fas fa-user"></i>
+            </div>
+            <div class="input-box">
+                <i class="fa-solid fa-id-card"></i>
+                <span class="separator">|</span>
+                <input type="text" id="user-id" placeholder="User ID">
+            </div>
+            <div class="input-box">
+                <i class="fas fa-lock"></i>
+                <span class="separator">|</span>
+                <input type="password" id="password" placeholder="Password">
+                <i class="fas fa-eye eye-icon"></i>
+            </div>
+            <button class="login-btn">Login</button>
+            <p class="signup-text">**You can create a new account in your app**</p>
+            <div class="error-message" id="loginError"></div>
+            <div class="loading" id="loginLoading">Logging in...</div>
+        </div>
+        <div class="side-buttons">
+            <div class="side-button"><i class="fas fa-info-circle"></i></div>
+            <div class="side-button"><i class="fas fa-qrcode"></i></div>
+            <div class="side-button"><i class="fas fa-keyboard"></i></div>
+            <div class="side-button"><i class="fas fa-wrench"></i></div>
+        </div>
+    </div>
+
+    <!--Deposition Section-->
+    <div id="deposit-section" style="display: none;">
+        <div class="container">
+            <div class="details-box">
+                <div class="profile-section user-icon">
+                    <i class="fas fa-user-circle"></i>
+                    <div class="user-info">
+                        <div class="user-name" id="userName">User Name</div>
+                        <div class="user-id" id="userId">User ID: 00000</div>
+                    </div>
+                </div>
+                
+                <div class="timestamp">Date-Time: <%= new Date().toISOString().replace('T', ' ').substring(0, 19) %></div>
+                <div class="count-box" id="bottleCount">0</div>
+            </div>
+
+            <div class="interaction">
+                <button class="deposit-btn">Deposit</button>
+                <button class="End-btn">End</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scanner Section -->
+    <div class="scanner-container" id="scannerContainer">
+        <div class="camera-section">
+            <div class="camera-feed">
+                <video id="videoElement" autoplay playsinline></video>
+                <div class="scanning-overlay">
+                    <div id="scannerMessage">Position your bottle in the frame</div>
+                    <div class="scanning-animation"></div>
+                    <div class="scan-timer" id="scanTimer">7</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="result-section">
+            <div class="scan-info">
+                <h3>Scan Information</h3>
+                <div class="scan-stats">
+                    <span>Total Scans:</span>
+                    <span id="totalScans">0</span>
+                </div>
+                <div class="scan-stats">
+                    <span>Bottles Detected:</span>
+                    <span id="bottlesDetected">0</span>
+                </div>
+                <div class="scan-stats">
+                    <span>Confidence:</span>
+                    <span id="confidenceValue">0%</span>
+                </div>
+            </div>
+            
+            <div class="result-history">
+                <h3>Recent Results</h3>
+                <div id="resultHistory"></div>
+            </div>
+            
+            <div class="action-panel">
+                <button class="action-btn add-more-btn" id="addMoreBtn">Add More Bottles</button>
+                <button class="action-btn end-btn" id="endBtn">End Session</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="deposit-screen" style="display: none;">
+        <div class="message-screen">
+            <p class="green">Deposit your bottles Guardian...!</p>
+            <button id="bottle-detected-btn">Bottle Detected</button>
+            <button id="foreign-item-btn">Foreign Item Detected</button>
+        </div>
+    </div>
+    
+    <div id="bottle-detected-screen" style="display: none;">
+        <div class="message-screen">
+            <p class="green">Bottle Detected...!</p>
+        </div>
+    </div>
+
+    <div id="patience-screen" style="display: none;">
+        <div class="message-screen">
+            <p class="green">Patience Guardian...!</p>
+            <p class="sub">This won't take long</p>
+        </div>
+    </div>
+    
+    <div id="foreign-item-screen" style="display: none;">
+        <div class="message-screen">
+            <p class="red">Foreign Item Detected...!</p>
+            <p class="sub">Please collect your item in the vent</p>
+        </div>
+    </div>
+
+    <div class="result-screen" id="resultScreen">
+        <h2 id="resultTitle"></h2>
+        <p id="resultMessage"></p>
+        <button id="resultButton">Continue</button>
+    </div>
+
+    <script>
+        const socket = io();
+        let scanning = false;
+        let scanTimer = null;
+        const video = document.getElementById('videoElement');
+        const scannerContainer = document.getElementById('scannerContainer');
+        const scannerMessage = document.getElementById('scannerMessage');
+        const scanTimerElement = document.getElementById('scanTimer');
+        const countBox = document.getElementById('bottleCount');
+        const resultScreen = document.getElementById('resultScreen');
+        const addMoreBtn = document.getElementById('addMoreBtn');
+        const endBtn = document.getElementById('endBtn');
+        const loginSection = document.getElementById('login-section');
+        const depositSection = document.getElementById('deposit-section');
+        const loginError = document.getElementById('loginError');
+        const loginLoading = document.getElementById('loginLoading');
+        const userName = document.getElementById('userName');
+        const userId = document.getElementById('userId');
+        let currentCount = 0;
+
+        // Add scanning timeout
+        let scanTimeout = null;
+        const SCAN_DURATION = 7000; // 7 seconds
+        let resultHistory = [];
+
+        // Ensure login section is visible and deposit section is hidden on load
+        window.onload = () => {
+            loginSection.style.display = 'block';
+            depositSection.style.display = 'none';
+            scannerContainer.style.display = 'none';
+        };
+
+        // Login functionality
+        document.querySelector('.login-btn').addEventListener('click', () => {
+            const userIdInput = document.getElementById('user-id').value;
+            const passwordInput = document.getElementById('password').value;
+
+            if (!userIdInput || !passwordInput) {
+                loginError.textContent = 'Please enter both User ID and Password';
+                loginError.style.display = 'block';
+                return;
+            }
+
+            loginError.style.display = 'none';
+            loginLoading.style.display = 'block';
+
+            // Emit login event
+            socket.emit('login', {
+                userId: userIdInput,
+                password: passwordInput
+            });
+        });
+
+        // Handle login success
+        socket.on('loginSuccess', (data) => {
+            loginLoading.style.display = 'none';
+            loginSection.style.display = 'none';
+            depositSection.style.display = 'block';
+            userName.textContent = data.name;
+            userId.textContent = `User ID: ${data.userId}`;
+            countBox.textContent = data.bottleCount || '0';
+            currentCount = data.bottleCount || 0;
+        });
+
+        // Handle login failure
+        socket.on('loginFailed', (message) => {
+            loginLoading.style.display = 'none';
+            loginError.textContent = message || 'Login failed. Please try again.';
+            loginError.style.display = 'block';
+        });
+
+        // New camera setup method
+        async function setupCamera() {
+            try {
+                // First check if we can access media devices
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Your browser does not support camera access');
+                }
+
+                // List available devices
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+                if (videoDevices.length === 0) {
+                    throw new Error('No camera found');
+                }
+
+                // Try to get the first available camera
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: false,
+                    video: {
+                        deviceId: videoDevices[0].deviceId,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        frameRate: { ideal: 30 }
+                    }
+                });
+
+                // Set up video element
+                video.srcObject = stream;
+                video.setAttribute('playsinline', true); // Important for iOS
+                video.setAttribute('autoplay', true);
+                
+                // Wait for video to be ready
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        video.play().then(resolve).catch(resolve);
+                    };
+                });
+
+                return true;
+            } catch (err) {
+                console.error('Camera setup error:', err);
+                showError(`Camera error: ${err.message || 'Could not access camera'}`);
+                return false;
+            }
+        }
+
+        // Update startScanning function
+        async function startScanning() {
+            if (scanning) return;
+            
+            scanning = true;
+            scannerContainer.style.display = 'flex';
+            scannerMessage.textContent = 'Starting camera...';
+            
+            // Clear any existing timeouts and streams
+            if (scanTimeout) {
+                clearTimeout(scanTimeout);
+                scanTimeout = null;
+            }
+            
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => {
+                    track.stop();
+                    track.enabled = false;
+                });
+                video.srcObject = null;
+            }
+
+            // Clear previous detections and results
+            clearDetectionBoxes();
+            resultScreen.style.display = 'none';
+
+            const success = await setupCamera();
+            if (success) {
+                scannerMessage.textContent = 'Position your bottle in the frame';
+                startScanTimer();
+                
+                // Set timeout to close camera after 7 seconds
+                scanTimeout = setTimeout(() => {
+                    scanFrame();
+                }, SCAN_DURATION);
+            } else {
+                scanning = false;
+                scannerContainer.style.display = 'none';
+            }
+        }
+
+        // Update scanFrame function
+        function scanFrame() {
+            if (!scanning || !video.srcObject) return;
+            
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                const context = canvas.getContext('2d');
+                context.drawImage(video, 0, 0);
+                
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+                socket.emit('scanFrame', imageData);
+                
+                // Close scanner after sending frame
+                closeScanner();
+            } catch (err) {
+                console.error('Frame capture error:', err);
+                showError('Failed to capture image. Please try again.');
+            }
+        }
+
+        // Handle end session
+        function endSession() {
+            closeScanner();
+            loginSection.style.display = 'block';
+            depositSection.style.display = 'none';
+            currentCount = 0;
+            countBox.textContent = '0';
+            
+            // Reset all stats
+            document.getElementById('totalScans').textContent = '0';
+            document.getElementById('bottlesDetected').textContent = '0';
+            document.getElementById('confidenceValue').textContent = '0%';
+            
+            // Clear user data
+            userName.textContent = 'User Name';
+            userId.textContent = 'User ID: 00000';
+            
+            // Hide result screen if visible
+            resultScreen.style.display = 'none';
+            
+            // Clear result history
+            resultHistory = [];
+            updateResultHistory();
+        }
+
+        // Close scanner
+        function closeScanner() {
+            scanning = false;
+            
+            // Stop video stream
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => {
+                    track.stop();
+                    track.enabled = false;
+                });
+                video.srcObject = null;
+            }
+
+            // Clear timer
+            if (scanTimer) {
+                clearInterval(scanTimer);
+                scanTimer = null;
+            }
+
+            // Reset UI
+            scannerContainer.style.display = 'none';
+            scannerMessage.textContent = 'Position your bottle in the frame';
+            scanTimerElement.textContent = '7';
+            
+            // Clear any detection boxes
+            clearDetectionBoxes();
+        }
+
+        // Start scan timer
+        function startScanTimer() {
+            let timeLeft = 7;
+            scanTimerElement.textContent = timeLeft;
+            
+            if (scanTimer) clearInterval(scanTimer);
+            
+            scanTimer = setInterval(() => {
+                timeLeft--;
+                scanTimerElement.textContent = timeLeft;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(scanTimer);
+                    scanFrame();
+                }
+            }, 1000);
+        }
+
+        // Add result to history
+        function addResultToHistory(isBottle, confidence) {
+            const time = new Date().toLocaleTimeString();
+            const result = {
+                isBottle,
+                confidence,
+                time
+            };
+            
+            resultHistory.unshift(result);
+            if (resultHistory.length > 5) resultHistory.pop();
+            
+            updateResultHistory();
+        }
+
+        // Update result history display
+        function updateResultHistory() {
+            const historyDiv = document.getElementById('resultHistory');
+            historyDiv.innerHTML = resultHistory.map(result => `
+                <div class="result-item ${result.isBottle ? 'result-success' : 'result-failure'}">
+                    <span>${result.isBottle ? 'Bottle Detected' : 'Not a Bottle'}</span>
+                    <span class="result-time">${result.time}</span>
+                </div>
+            `).join('');
+        }
+
+        // Update showResult function
+        function showResult(isBottle, confidence, detections = []) {
+            // Add to history
+            addResultToHistory(isBottle, confidence);
+
+            const resultScreen = document.getElementById('resultScreen');
+            const resultTitle = document.getElementById('resultTitle');
+            const resultMessage = document.getElementById('resultMessage');
+            const resultButton = document.getElementById('resultButton');
+
+            resultScreen.className = `result-screen ${isBottle ? 'success' : 'error'}`;
+            resultTitle.textContent = isBottle ? 'Success!' : 'Not Deposited';
+            resultMessage.textContent = isBottle ? 
+                'Bottle has been successfully deposited!' : 
+                'Please collect your item from the outlet.';
+            resultButton.textContent = isBottle ? 'Add More' : 'Try Again';
+            resultScreen.style.display = 'block';
+
+            if (isBottle) {
+                currentCount++;
+                countBox.textContent = currentCount;
+                
+                if (detections && detections.length > 0) {
+                    drawDetections(detections);
+                }
+            }
+
+            // Handle button click
+            resultButton.onclick = () => {
+                resultScreen.style.display = 'none';
+                clearDetectionBoxes();
+                if (isBottle) {
+                    startScanning(); // Start new scan
+                } else {
+                    closeScanner();
+                }
+            };
+        }
+
+        // Update drawDetections function
+        function drawDetections(detections) {
+            clearDetectionBoxes();
+            
+            const cameraFeed = document.querySelector('.camera-feed');
+            const videoRect = video.getBoundingClientRect();
+            
+            detections.forEach(detection => {
+                // Create detection box
+                const box = document.createElement('div');
+                box.className = 'detection-box';
+                
+                // Scale coordinates to video display size
+                const scaleX = videoRect.width / video.videoWidth;
+                const scaleY = videoRect.height / video.videoHeight;
+                
+                box.style.left = `${detection.x * scaleX}px`;
+                box.style.top = `${detection.y * scaleY}px`;
+                box.style.width = `${detection.width * scaleX}px`;
+                box.style.height = `${detection.height * scaleY}px`;
+                
+                // Create label with class name and confidence
+                const label = document.createElement('div');
+                label.className = 'detection-label';
+                
+                // Format label text
+                const labelText = `${detection.label} (${Math.round(detection.confidence * 100)}%)`;
+                label.textContent = labelText;
+                
+                // Position label above the box
+                label.style.left = `${detection.x * scaleX}px`;
+                label.style.top = `${(detection.y * scaleY) - 25}px`;
+                
+                // Add to camera feed
+                cameraFeed.appendChild(box);
+                cameraFeed.appendChild(label);
+            });
+        }
+
+        // Add function to clear detection boxes
+        function clearDetectionBoxes() {
+            const boxes = document.querySelectorAll('.detection-box, .detection-label');
+            boxes.forEach(box => box.remove());
+        }
+
+        // Event Listeners
+        document.querySelector('.deposit-btn').addEventListener('click', () => {
+            // Emit scanner open event
+            socket.emit('scannerOpen');
+            startScanning();
+        });
+        document.querySelector('.End-btn').addEventListener('click', endSession);
+        endBtn.addEventListener('click', endSession);
+        addMoreBtn.addEventListener('click', () => {
+            resultScreen.style.display = 'none';
+            clearDetectionBoxes();
+            startScanning();
+        });
+        
+        // Update socket detection result handler
+        socket.on('detectionResult', (data) => {
+            if (data.error) {
+                showError(data.error);
+                return;
+            }
+
+            showResult(data.is_bottle, data.confidence, data.detections);
+            
+            // Update statistics
+            document.getElementById('totalScans').textContent = 
+                (parseInt(document.getElementById('totalScans').textContent) + 1).toString();
+            
+            if (data.is_bottle) {
+                document.getElementById('bottlesDetected').textContent = 
+                    (parseInt(document.getElementById('bottlesDetected').textContent) + 1).toString();
+            }
+            
+            document.getElementById('confidenceValue').textContent = 
+                `${Math.round(data.confidence * 100)}%`;
+        });
+
+        // Handle visibility change
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && scanning) {
+                closeScanner();
+            }
+        });
+
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            if (scanning) {
+                closeScanner();
+            }
+        });
+
+        // Password visibility toggle
+        document.querySelector('.eye-icon').addEventListener('click', () => {
+            const passwordInput = document.getElementById('password');
+            passwordInput.type = passwordInput.type === 'password' ? 'text' : 'password';
+        });
+
+        // Add error handling function
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            document.body.appendChild(errorDiv);
+            
+            setTimeout(() => {
+                errorDiv.remove();
+            }, 3000);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (scanning) {
+                const detections = document.querySelectorAll('.detection-box, .detection-label');
+                if (detections.length > 0) {
+                    const boxes = Array.from(detections).filter(el => el.classList.contains('detection-box'));
+                    const labels = Array.from(detections).filter(el => el.classList.contains('detection-label'));
+                    
+                    // Redraw detections
+                    boxes.forEach((box, index) => {
+                        const label = labels[index];
+                        if (label) {
+                            const rect = box.getBoundingClientRect();
+                            label.style.left = `${rect.left}px`;
+                            label.style.top = `${rect.top - 25}px`;
+                        }
+                    });
+                }
+            }
+        });
+    </script>
+</body>
+</html> 

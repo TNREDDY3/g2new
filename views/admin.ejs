@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Portal</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        .terminal {
+            background: #000;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .log-line {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid rgba(0, 255, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .timestamp {
+            color: #666;
+            margin-right: 10px;
+        }
+
+        .status {
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 3px;
+        }
+
+        .status.open {
+            color: #00ff00;
+            background: rgba(0, 255, 0, 0.1);
+        }
+
+        .status.true {
+            color: #00ff00;
+            background: rgba(0, 255, 0, 0.1);
+        }
+
+        .status.false {
+            color: #ff0000;
+            background: rgba(255, 0, 0, 0.1);
+        }
+
+        .clear-btn {
+            background: #333;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .clear-btn:hover {
+            background: #444;
+        }
+
+        .auto-scroll {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #333;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+        }
+
+        .auto-scroll.active {
+            background: #00ff00;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <button class="clear-btn" onclick="clearLog()">Clear Log</button>
+    <div class="terminal" id="logContainer"></div>
+    <button class="auto-scroll" onclick="toggleAutoScroll()">Auto-Scroll: ON</button>
+
+    <script>
+        const socket = io();
+        const logContainer = document.getElementById('logContainer');
+        let autoScroll = true;
+
+        // Function to toggle auto-scroll
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            const btn = document.querySelector('.auto-scroll');
+            btn.textContent = `Auto-Scroll: ${autoScroll ? 'ON' : 'OFF'}`;
+            btn.classList.toggle('active', autoScroll);
+        }
+
+        // Function to scroll to bottom
+        function scrollToBottom() {
+            if (autoScroll) {
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
+
+        // Function to add a log entry
+        function addLogEntry(status) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logLine = document.createElement('div');
+            logLine.className = 'log-line';
+            
+            let statusClass, statusText;
+            switch(status) {
+                case 'open':
+                    statusClass = 'open';
+                    statusText = 'OPEN';
+                    break;
+                case true:
+                    statusClass = 'true';
+                    statusText = 'TRUE';
+                    break;
+                case false:
+                    statusClass = 'false';
+                    statusText = 'FALSE';
+                    break;
+            }
+            
+            logLine.innerHTML = `
+                <span class="timestamp">[${timestamp}]</span>
+                <span class="status ${statusClass}">${statusText}</span>
+            `;
+            
+            logContainer.insertBefore(logLine, logContainer.firstChild);
+            scrollToBottom();
+        }
+
+        // Function to clear the log
+        function clearLog() {
+            logContainer.innerHTML = '';
+        }
+
+        // Listen for deposit attempts and scanner open events
+        socket.on('depositAttempt', (data) => {
+            addLogEntry(data.is_bottle);
+        });
+
+        socket.on('scannerOpen', () => {
+            addLogEntry('open');
+        });
+
+        // Handle socket connection status
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+        });
+
+        // Initial scroll to bottom
+        scrollToBottom();
+    </script>
+</body>
+</html> 
